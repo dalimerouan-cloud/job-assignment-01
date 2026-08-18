@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 Migration = tuple[int, Callable[[sqlite3.Connection], None]]
 
-
+##fix the genration column to be grather that the last generation number for the last boot that was registered
 def migration_001(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
@@ -31,7 +31,7 @@ def migration_001(connection: sqlite3.Connection) -> None:
             received_at TEXT NOT NULL,
             metric TEXT NOT NULL,
             value REAL NOT NULL,
-            UNIQUE (device_id, sequence),
+            UNIQUE (device_id, boot_id, sequence),
             FOREIGN KEY (device_id, boot_id)
                 REFERENCES device_boots (device_id, boot_id)
         )

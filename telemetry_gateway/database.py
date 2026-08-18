@@ -48,7 +48,8 @@ class TelemetryStore:
         if filename != ":memory:":
             self._connection.execute("PRAGMA journal_mode = WAL")
         apply_migrations(self._connection)
-
+        
+##fixing the register boot function to register boot in the database and return the appropriate result
     def register_boot(self, event: BootRegistrationInput) -> BootRegistrationResult:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
@@ -107,7 +108,7 @@ class TelemetryStore:
                 raise UnknownBootError()
             generation = int(boot["generation"])
 
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._connection.execute("BEGIN IMMEDIATE") 
             try:
                 insert = self._connection.execute(
                     """
@@ -145,7 +146,7 @@ class TelemetryStore:
                         device_time = excluded.device_time,
                         received_at = excluded.received_at,
                         value = excluded.value
-                    WHERE excluded.device_time > current_state.device_time
+                    WHERE (excluded.generation, excluded.sequence) > (current_state.generation, current_state.sequence)
                     """,
                     (
                         event.deviceId,

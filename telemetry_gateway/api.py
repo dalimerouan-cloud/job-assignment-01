@@ -61,7 +61,6 @@ def create_app(
             status_code=200 if ready else 503,
             content={"status": "ready" if ready else "not_ready"},
         )
-
     @app.post("/api/boots")
     async def register_boot(event: BootRegistrationInput) -> JSONResponse:
         result = service.register_boot(event)

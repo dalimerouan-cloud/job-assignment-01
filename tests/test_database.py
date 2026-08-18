@@ -1,3 +1,5 @@
+import pytest
+
 from telemetry_gateway.database import TelemetryStore
 from telemetry_gateway.models import BootRegistrationInput, TelemetryInput
 
@@ -77,5 +79,90 @@ def test_repeated_event_from_same_boot_is_a_duplicate() -> None:
             "currentChanged": False,
         }
         assert len(store.list_events(10)) == 1
+    finally:
+        store.close()
+
+def test_multiple_boots_get_strictly_increasing_generation_numbers() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        first = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        second = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-b"))
+        third = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-c"))
+
+        assert first.to_api()["generation"] == 1
+        assert second.to_api()["generation"] == 2
+        assert third.to_api()["generation"] == 3   
+    finally:
+        store.close()
+
+def test_multiple_boots_with_different_device_ids_get_strictly_increasing_generation_numbers() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        first = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        second = store.register_boot(BootRegistrationInput(deviceId="device-02", bootId="boot-a"))
+        third = store.register_boot(BootRegistrationInput(deviceId="device-03", bootId="boot-a"))
+
+        assert first.to_api()["generation"] == 1
+        assert second.to_api()["generation"] == 1
+        assert third.to_api()["generation"] == 1   
+    finally:
+        store.close()
+
+def test_multiple_boots_with_different_device_ids_and_different_boot_ids_get_strictly_increasing_generation_numbers() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        first = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        second = store.register_boot(BootRegistrationInput(deviceId="device-02", bootId="boot-b"))
+        third = store.register_boot(BootRegistrationInput(deviceId="device-03", bootId="boot-c"))
+
+        assert first.to_api()["generation"] == 1
+        assert second.to_api()["generation"] == 1
+        assert third.to_api()["generation"] == 1   
+    finally:
+        store.close()
+
+def test_out_of_order_event_does_not_move_state_backwards() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        store.ingest(telemetry(sequence=5, value=22.0), "2026-08-12T09:00:02+00:00")
+        delayed = store.ingest(telemetry(sequence=2, value=21.0), "2026-08-12T09:00:03+00:00")
+
+        assert delayed.duplicate is False
+        assert delayed.current_changed is False
+        
+        state = store.list_current_states()[0].to_api()
+        assert state["sequence"] == 5
+        assert state["value"] == 22.0
+        
+        assert len(store.list_events(10)) == 2
+    finally:
+        store.close()
+
+def test_telemetry_for_unregistered_boot_is_rejected2() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        # note: no store.register_boot(...) call — this boot was never registered
+
+        with pytest.raises(Exception) as exc_info:
+            store.ingest(telemetry(), "2026-08-12T09:00:01+00:00")
+
+        # inspect what actually got raised
+        print(type(exc_info.value), exc_info.value)
+    finally:
+        store.close()
+
+def test_same_sequence_different_boot_is_not_a_duplicate() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-b"))
+
+        first = store.ingest(telemetry(bootId="boot-a", sequence=1), "2026-08-12T09:00:01+00:00")
+        second = store.ingest(telemetry(bootId="boot-b", sequence=1), "2026-08-12T09:00:02+00:00")
+
+        assert first.duplicate is False
+        assert second.duplicate is False # same sequence number, but different boot — NOT a duplicate
+        assert len(store.list_events(10)) == 2
     finally:
         store.close()
