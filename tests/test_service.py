@@ -1,12 +1,15 @@
 import asyncio
 from datetime import datetime, timezone
 
+import pytest
+
 from telemetry_gateway.models import (
     BootRegistrationResult,
     DeviceState,
     IngestResult,
     TelemetryInput,
 )
+from telemetry_gateway.realtime import RealtimeHub, MAX_QUEUE_SIZE
 from telemetry_gateway.service import TelemetryService
 
 
@@ -77,3 +80,57 @@ def test_service_publishes_a_state_during_ingestion() -> None:
     assert result.current_changed is True
     assert publisher.states == [state]
     assert repository.ingest_calls == 1
+
+class FakeWebSocket:
+    def __init__(self, slow: bool = False) -> None:
+        self.slow = slow
+        self.received: list[dict] = []
+        self.closed = False
+        self.close_code: int | None = None
+
+    async def accept(self) -> None:
+        pass
+
+    async def send_json(self, message: dict) -> None:
+        if self.slow:
+            await asyncio.sleep(999)  # simulate a client that never actually reads
+        self.received.append(message)
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        self.closed = True
+        self.close_code = code
+
+
+def make_state() -> DeviceState:
+    return DeviceState(
+        device_id="device-01",
+        boot_id="boot-a",
+        generation=1,
+        sequence=1,
+        device_time="2026-08-12T09:00:00+00:00",
+        received_at="2026-08-12T09:00:01+00:00",
+        metric="temperature",
+        value=21.4,
+    )
+
+
+@pytest.mark.anyio
+async def test_slow_client_does_not_block_healthy_clients() -> None:
+    hub = RealtimeHub()
+    fast_ws = FakeWebSocket(slow=False)
+    slow_ws = FakeWebSocket(slow=True)
+
+    await hub.connect(fast_ws)
+    await hub.connect(slow_ws)
+
+    # publish more messages than the slow client's queue can hold
+    for _ in range(MAX_QUEUE_SIZE + 5):
+        await hub.publish(make_state())
+        await asyncio.sleep(0)
+
+    # give the fast client's sender loop a chance to actually drain its queue
+    await asyncio.sleep(0.1)
+
+    assert len(fast_ws.received) == MAX_QUEUE_SIZE + 5  # fast client got everything
+    assert slow_ws.closed is True                          # slow client got dropped
+    assert slow_ws.close_code == 1008

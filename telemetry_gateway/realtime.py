@@ -7,7 +7,7 @@ from fastapi import WebSocket
 
 from telemetry_gateway.models import DeviceState
 
-MAX_QUEUE_SIZE = 10
+MAX_QUEUE_SIZE = 100 ##buffer limit for message queue for each client to event stay fast and not block the publisher when a client is slow by dropping the slow client 
 class StatePublisher(Protocol):
     async def publish(self, state: DeviceState) -> None: ...
 
@@ -27,12 +27,11 @@ class RealtimeHub:
                 message = await conn.queue.get()
                 await conn.websocket.send_json(message)
         except Exception:
-            self.disconnect(conn.websocket)
+            self.disconnect(conn.websocket) # this calls conn.task.cancel() on itself!
         finally:
             self._clients.pop(conn.websocket, None)
-    
-    
-    
+            
+            
     async def connect(self, client: WebSocket) -> None:
         await client.accept()
         conn = _ClientConnection(client)

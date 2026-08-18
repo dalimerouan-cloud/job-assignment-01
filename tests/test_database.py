@@ -121,7 +121,7 @@ def test_multiple_boots_with_different_device_ids_and_different_boot_ids_get_str
     finally:
         store.close()
 
-def test_out_of_order_event_does_not_move_state_backwards() -> None:
+def test_out_of_order_event_does_not_move_state_backward() -> None:
     store = TelemetryStore(":memory:")
     try:
         store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
@@ -139,7 +139,7 @@ def test_out_of_order_event_does_not_move_state_backwards() -> None:
     finally:
         store.close()
 
-def test_telemetry_for_unregistered_boot_is_rejected2() -> None:
+def test_telemetry_for_unregistered_boot_is_rejected() -> None:
     store = TelemetryStore(":memory:")
     try:
         # note: no store.register_boot(...) call — this boot was never registered
@@ -166,3 +166,28 @@ def test_same_sequence_different_boot_is_not_a_duplicate() -> None:
         assert len(store.list_events(10)) == 2
     finally:
         store.close()
+        
+def test_bad_device_clock_does_not_affect_ordering() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+
+        # event with a deviceTime far in the future (bad clock), but LOWER sequence
+        store.ingest(
+            telemetry(sequence=1, deviceTime="2099-01-01T00:00:00+00:00", value=99.9),
+            "2026-08-12T09:00:01+00:00",
+        )
+
+        # event with a normal deviceTime, but HIGHER sequence — must win regardless of deviceTime
+        result = store.ingest(
+            telemetry(sequence=2, deviceTime="2026-08-12T09:00:02+00:00", value=21.4),
+            "2026-08-12T09:00:03+00:00",
+        )
+
+        assert result.current_changed is True
+        current = store.list_current_states()[0].to_api()
+        assert current["sequence"] == 2
+        assert current["value"] == 21.4
+    finally:
+        store.close()
+
