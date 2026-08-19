@@ -81,6 +81,7 @@ def test_service_publishes_a_state_during_ingestion() -> None:
     assert publisher.states == [state]
     assert repository.ingest_calls == 1
 
+## check that the service publishes a state when the current state changes
 @pytest.mark.anyio
 async def test_publish_when_current_state_changed() -> None:
     event = TelemetryInput.model_validate(
@@ -119,6 +120,7 @@ async def test_publish_when_current_state_changed() -> None:
     assert outcome.current_changed is True
     
 
+## check that the service does not publish a state when the current state has not changed, ensuring that unnecessary notifications are not sent to clients.
 class FakeWebSocket:
     def __init__(self, slow: bool = False) -> None:
         self.slow = slow
@@ -151,7 +153,7 @@ def make_state() -> DeviceState:
         value=21.4,
     )
 
-
+## check that the hub correctly handles slow clients without blocking healthy clients.
 @pytest.mark.anyio
 async def test_slow_client_does_not_block_healthy_clients() -> None:
     hub = RealtimeHub()
@@ -173,6 +175,7 @@ async def test_slow_client_does_not_block_healthy_clients() -> None:
     assert slow_ws.closed is True                          # slow client got dropped
     assert slow_ws.close_code == 1008
     
+## check that the service does not publish a state when the current state has not changed, ensuring that unnecessary notifications are not sent to clients.
 class FakeRepositoryNoChange:
     def __init__(self) -> None:
         self.ingest_calls = 0
@@ -195,6 +198,7 @@ class FakeRepositoryNoChange:
 
     def ping(self):
         return True
+## check that the service does not publish a state when the current state has not changed, ensuring that unnecessary notifications are not sent to clients.
 @pytest.mark.anyio
 async def test_does_not_publish_when_current_state_unchanged() -> None:
     event = TelemetryInput.model_validate(

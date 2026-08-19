@@ -81,7 +81,7 @@ def test_repeated_event_from_same_boot_is_a_duplicate() -> None:
         assert len(store.list_events(10)) == 1
     finally:
         store.close()
-
+##check that the store correctly handles multiple boots for the same device, ensuring that each boot gets a strictly increasing generation number and that events from different boots are treated independently.
 def test_multiple_boots_get_strictly_increasing_generation_numbers() -> None:
     store = TelemetryStore(":memory:")
     try:
@@ -95,6 +95,7 @@ def test_multiple_boots_get_strictly_increasing_generation_numbers() -> None:
     finally:
         store.close()
 
+##check that the store correctly handles multiple boots for the same device, ensuring that each boot gets a strictly increasing generation number and that events from different boots are treated independently.
 def test_multiple_boots_with_different_device_ids_get_strictly_increasing_generation_numbers() -> None:
     store = TelemetryStore(":memory:")
     try:
@@ -107,7 +108,7 @@ def test_multiple_boots_with_different_device_ids_get_strictly_increasing_genera
         assert third.to_api()["generation"] == 1   
     finally:
         store.close()
-
+##check that the store correctly handles multiple boots for different devices with different boot IDs, ensuring that each boot gets a strictly increasing generation number and that events from different boots are treated independently.
 def test_multiple_boots_with_different_device_ids_and_different_boot_ids_get_strictly_increasing_generation_numbers() -> None:
     store = TelemetryStore(":memory:")
     try:
@@ -120,7 +121,7 @@ def test_multiple_boots_with_different_device_ids_and_different_boot_ids_get_str
         assert third.to_api()["generation"] == 1   
     finally:
         store.close()
-
+##check that the store correctly handles out-of-order events, ensuring that the current state reflects the highest sequence number received, regardless of the order in which events arrive.
 def test_out_of_order_event_does_not_move_state_backward() -> None:
     store = TelemetryStore(":memory:")
     try:
@@ -138,7 +139,7 @@ def test_out_of_order_event_does_not_move_state_backward() -> None:
         assert len(store.list_events(10)) == 2
     finally:
         store.close()
-
+##check that the store correctly rejects telemetry for unregistered boots.
 def test_telemetry_for_unregistered_boot_is_rejected() -> None:
     store = TelemetryStore(":memory:")
     try:
@@ -152,6 +153,7 @@ def test_telemetry_for_unregistered_boot_is_rejected() -> None:
     finally:
         store.close()
 
+## check that the store correctly handles events with the same sequence number but different boot IDs, ensuring that they are treated as distinct events and not duplicates.
 def test_same_sequence_different_boot_is_not_a_duplicate() -> None:
     store = TelemetryStore(":memory:")
     try:
@@ -167,6 +169,7 @@ def test_same_sequence_different_boot_is_not_a_duplicate() -> None:
     finally:
         store.close()
         
+## check that the store correctly handles events with the same sequence number but different device IDs, ensuring that they are treated as distinct events and not duplicates.
 def test_bad_device_clock_does_not_affect_ordering() -> None:
     store = TelemetryStore(":memory:")
     try:
