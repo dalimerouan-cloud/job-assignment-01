@@ -76,6 +76,7 @@ function connect() {
     status.textContent = 'Realtime connected';
     status.className = 'status online';
     setError('');
+    loadSnapshot().catch((error) => setError(error.message)); // Refresh snapshot on connect
   });
 
   socket.addEventListener('message', (event) => {

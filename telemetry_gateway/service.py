@@ -23,12 +23,15 @@ class TelemetryService:
         self._repository = repository
         self._publisher = publisher
         self._now = now or (lambda: datetime.now(timezone.utc))
-
+        
+    ## the register_boot method registers a boot event in the repository and returns the result,
     def register_boot(self, event: BootRegistrationInput) -> BootRegistrationResult:
         return self._repository.register_boot(event)
-
+    
+    ## the ingest method processes telemetry input, updates the repository, and publishes the new device state if it has changed.
     async def ingest(self, event: TelemetryInput) -> IngestResult:
         received_at = self._now().astimezone(timezone.utc).isoformat()
-        state = self._repository.preview_state(event, received_at)
-        await self._publisher.publish(state)
-        return self._repository.ingest(event, received_at)
+        result = self._repository.ingest(event, received_at)
+        if result.current_changed and result.state is not None:
+            await self._publisher.publish(result.state)
+        return result

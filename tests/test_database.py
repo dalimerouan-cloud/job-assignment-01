@@ -1,3 +1,5 @@
+import pytest
+
 from telemetry_gateway.database import TelemetryStore
 from telemetry_gateway.models import BootRegistrationInput, TelemetryInput
 
@@ -79,3 +81,116 @@ def test_repeated_event_from_same_boot_is_a_duplicate() -> None:
         assert len(store.list_events(10)) == 1
     finally:
         store.close()
+##check that the store correctly handles multiple boots for the same device, ensuring that each boot gets a strictly increasing generation number and that events from different boots are treated independently.
+def test_multiple_boots_get_strictly_increasing_generation_numbers() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        first = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        second = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-b"))
+        third = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-c"))
+
+        assert first.to_api()["generation"] == 1
+        assert second.to_api()["generation"] == 2
+        assert third.to_api()["generation"] == 3   
+    finally:
+        store.close()
+
+##check that the store correctly handles multiple boots for the same device, ensuring that each boot gets a strictly increasing generation number and that events from different boots are treated independently.
+def test_multiple_boots_with_different_device_ids_get_strictly_increasing_generation_numbers() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        first = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        second = store.register_boot(BootRegistrationInput(deviceId="device-02", bootId="boot-a"))
+        third = store.register_boot(BootRegistrationInput(deviceId="device-03", bootId="boot-a"))
+
+        assert first.to_api()["generation"] == 1
+        assert second.to_api()["generation"] == 1
+        assert third.to_api()["generation"] == 1   
+    finally:
+        store.close()
+##check that the store correctly handles multiple boots for different devices with different boot IDs, ensuring that each boot gets a strictly increasing generation number and that events from different boots are treated independently.
+def test_multiple_boots_with_different_device_ids_and_different_boot_ids_get_strictly_increasing_generation_numbers() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        first = store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        second = store.register_boot(BootRegistrationInput(deviceId="device-02", bootId="boot-b"))
+        third = store.register_boot(BootRegistrationInput(deviceId="device-03", bootId="boot-c"))
+
+        assert first.to_api()["generation"] == 1
+        assert second.to_api()["generation"] == 1
+        assert third.to_api()["generation"] == 1   
+    finally:
+        store.close()
+##check that the store correctly handles out-of-order events, ensuring that the current state reflects the highest sequence number received, regardless of the order in which events arrive.
+def test_out_of_order_event_does_not_move_state_backward() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        store.ingest(telemetry(sequence=5, value=22.0), "2026-08-12T09:00:02+00:00")
+        delayed = store.ingest(telemetry(sequence=2, value=21.0), "2026-08-12T09:00:03+00:00")
+
+        assert delayed.duplicate is False
+        assert delayed.current_changed is False
+        
+        state = store.list_current_states()[0].to_api()
+        assert state["sequence"] == 5
+        assert state["value"] == 22.0
+        
+        assert len(store.list_events(10)) == 2
+    finally:
+        store.close()
+##check that the store correctly rejects telemetry for unregistered boots.
+def test_telemetry_for_unregistered_boot_is_rejected() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        # note: no store.register_boot(...) call — this boot was never registered
+
+        with pytest.raises(Exception) as exc_info:
+            store.ingest(telemetry(), "2026-08-12T09:00:01+00:00")
+
+        # inspect what actually got raised
+        print(type(exc_info.value), exc_info.value)
+    finally:
+        store.close()
+
+## check that the store correctly handles events with the same sequence number but different boot IDs, ensuring that they are treated as distinct events and not duplicates.
+def test_same_sequence_different_boot_is_not_a_duplicate() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-b"))
+
+        first = store.ingest(telemetry(bootId="boot-a", sequence=1), "2026-08-12T09:00:01+00:00")
+        second = store.ingest(telemetry(bootId="boot-b", sequence=1), "2026-08-12T09:00:02+00:00")
+
+        assert first.duplicate is False
+        assert second.duplicate is False # same sequence number, but different boot — NOT a duplicate
+        assert len(store.list_events(10)) == 2
+    finally:
+        store.close()
+        
+## check that the store correctly handles events with the same sequence number but different device IDs, ensuring that they are treated as distinct events and not duplicates.
+def test_bad_device_clock_does_not_affect_ordering() -> None:
+    store = TelemetryStore(":memory:")
+    try:
+        store.register_boot(BootRegistrationInput(deviceId="device-01", bootId="boot-a"))
+
+        # event with a deviceTime far in the future (bad clock), but LOWER sequence
+        store.ingest(
+            telemetry(sequence=1, deviceTime="2099-01-01T00:00:00+00:00", value=99.9),
+            "2026-08-12T09:00:01+00:00",
+        )
+
+        # event with a normal deviceTime, but HIGHER sequence — must win regardless of deviceTime
+        result = store.ingest(
+            telemetry(sequence=2, deviceTime="2026-08-12T09:00:02+00:00", value=21.4),
+            "2026-08-12T09:00:03+00:00",
+        )
+
+        assert result.current_changed is True
+        current = store.list_current_states()[0].to_api()
+        assert current["sequence"] == 2
+        assert current["value"] == 21.4
+    finally:
+        store.close()
+

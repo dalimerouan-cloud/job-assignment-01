@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 from telemetry_gateway.api import create_app
 
-
 def test_health_and_dashboard_are_local(tmp_path) -> None:
     app = create_app(str(tmp_path / "gateway.db"))
     with TestClient(app) as client:
@@ -64,3 +63,9 @@ def test_registers_boot_ingests_and_lists_state(tmp_path) -> None:
         assert devices.status_code == 200
         assert len(devices.json()["devices"]) == 1
         assert devices.json()["devices"][0]["value"] == 21.4
+
+
+
+
+
+

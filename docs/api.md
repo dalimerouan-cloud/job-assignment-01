@@ -16,6 +16,7 @@ Success response:
   "created": true
 }
 ```
+## register one its work perfectly first registration 
 
 A repeated registration returns `created: false` and the original generation.
 
@@ -26,7 +27,7 @@ POST /api/telemetry
 ```
 
 New event response:
-
+## this true in the first attempte
 ```json
 {
   "accepted": true,
