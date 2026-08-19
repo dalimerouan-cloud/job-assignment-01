@@ -81,6 +81,44 @@ def test_service_publishes_a_state_during_ingestion() -> None:
     assert publisher.states == [state]
     assert repository.ingest_calls == 1
 
+@pytest.mark.anyio
+async def test_publish_when_current_state_changed() -> None:
+    event = TelemetryInput.model_validate(
+        {
+            "deviceId": "device-01",
+            "bootId": "boot-a",
+            "sequence": 1,
+            "deviceTime": "2026-08-12T09:00:00Z",
+            "metric": "temperature", 
+            "value": 21.4,
+        }
+    )
+    state = DeviceState(
+        device_id="device-01", 
+        boot_id="boot-a",
+        generation=1,
+        sequence=1,
+        device_time="2026-08-12T09:00:00+00:00",
+        received_at="2026-08-12T09:00:01+00:00",
+        metric="temperature",
+        value=21.4,
+    )
+    
+    repository = FakeRepository(state)
+    publisher = RecordingPublisher()
+    service = TelemetryService(
+        repository,
+        publisher,
+        now=lambda: datetime(2026, 8, 12, 9, 0, 1, tzinfo=timezone.utc),
+    )
+    outcome = await service.ingest(event)
+    
+    assert repository.ingest_calls == 1
+    assert len(publisher.states) == 1
+    assert publisher.states[0] == state
+    assert outcome.current_changed is True
+    
+
 class FakeWebSocket:
     def __init__(self, slow: bool = False) -> None:
         self.slow = slow
@@ -134,3 +172,50 @@ async def test_slow_client_does_not_block_healthy_clients() -> None:
     assert len(fast_ws.received) == MAX_QUEUE_SIZE + 5  # fast client got everything
     assert slow_ws.closed is True                          # slow client got dropped
     assert slow_ws.close_code == 1008
+    
+class FakeRepositoryNoChange:
+    def __init__(self) -> None:
+        self.ingest_calls = 0
+
+    def register_boot(self, _event):
+        return BootRegistrationResult("device-01", "boot-a", 1, True)
+
+    def preview_state(self, _event, _received_at):
+        raise NotImplementedError("preview_state should not be called in this test")
+
+    def ingest(self, _event, _received_at):
+        self.ingest_calls += 1
+        return IngestResult(False, False, None)
+
+    def list_current_states(self):
+        return []
+
+    def list_events(self, _limit):
+        return []
+
+    def ping(self):
+        return True
+@pytest.mark.anyio
+async def test_does_not_publish_when_current_state_unchanged() -> None:
+    event = TelemetryInput.model_validate(
+        {
+            "deviceId": "device-01",
+            "bootId": "boot-a",
+            "sequence": 1,
+            "deviceTime": "2026-08-12T09:00:00Z",
+            "metric": "temperature", 
+            "value": 21.4,
+        }
+    )
+    repository = FakeRepositoryNoChange()
+    publisher = RecordingPublisher()
+    service = TelemetryService(
+        repository,
+        publisher,
+        now=lambda: datetime(2026, 8, 12, 9, 0, 1, tzinfo=timezone.utc),
+    )
+    outcome = await service.ingest(event)
+    
+    assert repository.ingest_calls == 1
+    assert len(publisher.states) == 0
+    assert outcome.current_changed is False
