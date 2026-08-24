@@ -1,0 +1,25 @@
+{
+  "name": "job-assignment-01",
+  "version": "1.0.0",
+  "description": "Repair a local environmental monitoring gateway. Remote sensor devices send temperature readings to a browser dashboard.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dalimerouan-cloud/job-assignment-01.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dalimerouan-cloud/job-assignment-01/issues"
+  },
+  "homepage": "https://github.com/dalimerouan-cloud/job-assignment-01#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0"
+  }
+}
