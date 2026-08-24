@@ -30,9 +30,6 @@ jobs:
     - name: start server
       run: python -m telemetry_gateway &
 
-    - name: wait for server to be ready
-      run: npx wait-on http://127.0.0.1:3000
-
     - name: start the simulator
       run: python simulator.py --devices 4 &
 
